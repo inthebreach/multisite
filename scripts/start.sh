@@ -1,8 +1,10 @@
 #!/bin/bash
 
-# Start MySQL and Apache services
-sudo service mysql start
+# Start MySQL service, using both options for compatibility
+sudo service mysql start || sudo /etc/init.d/mysql start
+
+# Start Apache service
 sudo service apache2 start
 
-# Await Gitpod port opening and output the WordPress site URL
+# Wait for Gitpod to open port 8080 and preview the site
 gp await-port 8080 && gp preview $(gp url 8080)
