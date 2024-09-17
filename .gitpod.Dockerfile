@@ -1,5 +1,8 @@
 FROM gitpod/workspace-full:latest
 
+# Set debconf to noninteractive to avoid user prompts during installation
+ENV DEBIAN_FRONTEND=noninteractive
+
 # Install Apache, MySQL, PHP, and required extensions
 RUN sudo apt-get update && sudo apt-get install -y \
     apache2 \
@@ -11,15 +14,13 @@ RUN sudo apt-get update && sudo apt-get install -y \
 # Enable Apache mod_rewrite for WordPress
 RUN sudo a2enmod rewrite
 
-# Initialize MySQL and create the necessary directories
-RUN mkdir -p /var/run/mysqld && chown mysql:mysql /var/run/mysqld
-
-# Start MySQL service
-RUN sudo service mysql start || sudo /etc/init.d/mysql start
+# Fix any Apache config issues by forcing the maintainer's version
+RUN sudo apt-get install -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -y apache2
 
 # Expose ports for MySQL and Apache
 EXPOSE 3306
 EXPOSE 80
 
-# Set passwordless sudo for gitpod user
+# Allow passwordless sudo for the gitpod user
 RUN echo "gitpod ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
