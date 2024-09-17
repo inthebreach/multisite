@@ -1,0 +1,15 @@
+image:
+  file: .gitpod.Dockerfile
+
+tasks:
+  - name: Install WordPress Multisite
+    init: bash ./scripts/install.sh
+    command: bash ./scripts/start.sh
+
+ports:
+  - port: 8080
+    onOpen: open-preview
+
+vscode:
+  extensions:
+    - eg2.vscode-npm-script
