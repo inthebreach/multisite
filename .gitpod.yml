@@ -2,32 +2,24 @@ image:
   file: .gitpod.Dockerfile
 
 tasks:
-  - name: Setup and Start WordPress Multisite
-    init: |
-      sudo service mysql start
-      sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASSWORD}';" || true
+  - init: |
+      sudo mkdir -p /var/run/mysqld && \
+      sudo chown -R mysql:mysql /var/run/mysqld && \
+      sudo chmod 755 /var/run/mysqld && \
+      sudo service mysql start && \
+      sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASSWORD}';" || true && \
       mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS wordpress;"
-      if [ ! -f /workspace/multisite/wordpress/wp-config.php ]; then
-        wp core download --path=/workspace/multisite/wordpress
-        SITE_URL=$(gp url 80)
-        wp config create --dbname=wordpress --dbuser=root --dbpass="${MYSQL_ROOT_PASSWORD}" --dbhost=localhost --path=/workspace/multisite/wordpress
-        wp core multisite-install --url="${SITE_URL}" \
-          --title="Gitpod Multisite" \
-          --admin_user="${WP_ADMIN_USER}" \
-          --admin_password="${WP_ADMIN_PASSWORD}" \
-          --admin_email="${WP_ADMIN_EMAIL}" \
-          --path=/workspace/multisite/wordpress
-        echo "WordPress Multisite installed successfully!"
-      else
-        echo "WordPress is already installed."
-      fi
+  - name: Start Apache and MySQL
     command: |
-      sudo service mysql start
-      sudo service apache2 restart
-      gp ports await 80 && gp preview $(gp url 80)
+      # Make sure Apache listens on port 8080
+      sudo sed -i 's/Listen 80/Listen 8080/' /etc/apache2/ports.conf && \
+      sudo sed -i 's/<VirtualHost *:80>/<VirtualHost *:8080>/' /etc/apache2/sites-available/000-default.conf && \
+      sudo service apache2 start && \
+      sudo service mysql start && \
+      gp await-port 8080 && gp preview $(gp url 8080)
 
 ports:
-  - port: 80
+  - port: 8080
     onOpen: open-preview
   - port: 3306
     onOpen: ignore
@@ -44,3 +36,10 @@ github:
     pullRequests: true
     addCheck: true
     addComment: true
+
+# Environment variables should be set in Gitpod settings:
+# MYSQL_ROOT_PASSWORD
+# WP_ADMIN_USER
+# WP_ADMIN_PASSWORD
+# WP_ADMIN_EMAIL
+
