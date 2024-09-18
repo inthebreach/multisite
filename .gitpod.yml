@@ -40,10 +40,10 @@ tasks:
     command: |
       # Start services
       sudo service mysql start
-      sudo service apache2 start
+      sudo service apache2 restart
 
       # Wait for Gitpod to open port 80 and preview the site
-      gp await-port 80 && gp preview $(gp url 80)
+      gp ports await 80 && gp preview $(gp url 80)
 
 ports:
   - port: 80
