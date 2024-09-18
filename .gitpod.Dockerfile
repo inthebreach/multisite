@@ -4,7 +4,8 @@ FROM gitpod/workspace-full:latest
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Update and install dependencies
-RUN sudo apt-get update && sudo apt-get install -y \
+RUN sudo apt-get update && \
+    sudo apt-get install -y \
     nginx \
     mysql-server \
     php-fpm php-mysql \
