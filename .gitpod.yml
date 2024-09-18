@@ -2,75 +2,36 @@ image:
   file: .gitpod.Dockerfile
 
 tasks:
-  - name: Setup and Start WordPress Multisite
+  - name: Setup WordPress Multisite
     init: |
-      # Start MySQL service
+      # Start MySQL and create a WordPress database
       sudo service mysql start || sudo /etc/init.d/mysql start
+      mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS wordpress;"
 
-      # Check if MySQL started successfully
-      if ! mysqladmin ping -u root --password="${MYSQL_ROOT_PASSWORD}" --silent; then
-        echo "MySQL failed to start."
-        exit 1
+      # Install WP-CLI if not already installed
+      if ! command -v wp &> /dev/null; then
+        curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+        chmod +x wp-cli.phar
+        sudo mv wp-cli.phar /usr/local/bin/wp
       fi
 
-      # Create MySQL database for WordPress
-      mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS wordpress;" || { echo "Failed to create the database"; exit 1; }
-
-      # Ensure WordPress is not already downloaded to prevent overwriting
+      # Download WordPress core if not already downloaded
       if [ ! -f /workspace/multisite/wordpress/wp-config.php ]; then
-        # Download WordPress
-        wp core download --path=/workspace/multisite/wordpress || { echo "Failed to download WordPress"; exit 1; }
-
-        # Get the Gitpod workspace URL dynamically
-        SITE_URL=$(gp url 80)
-
-        # Set up wp-config.php with database details
-        wp config create --dbname=wordpress --dbuser=root --dbpass="${MYSQL_ROOT_PASSWORD}" --dbhost=localhost --path=/workspace/multisite/wordpress || { echo "Failed to create wp-config.php"; exit 1; }
-
-        # Install WordPress Multisite
-        wp core multisite-install --url="${SITE_URL}" \
-          --title="Gitpod Multisite" \
-          --admin_user="${WP_ADMIN_USER}" \
-          --admin_password="${WP_ADMIN_PASSWORD}" \
-          --admin_email="${WP_ADMIN_EMAIL}" \
-          --path=/workspace/multisite/wordpress || { echo "Failed to install WordPress Multisite"; exit 1; }
-
-        echo "WordPress Multisite installed successfully!"
-      else
-        echo "WordPress is already installed."
+        wp core download --path=/workspace/multisite/wordpress
       fi
+
+      # Generate wp-config.php
+      wp config create --dbname=wordpress --dbuser=root --dbpass="${MYSQL_ROOT_PASSWORD}" --dbhost=localhost --path=/workspace/multisite/wordpress
+
+      # Install WordPress Multisite
+      SITE_URL=$(gp url 80)
+      wp core multisite-install --url="${SITE_URL}" \
+        --title="Gitpod Multisite" \
+        --admin_user="${WP_ADMIN_USER}" \
+        --admin_password="${WP_ADMIN_PASSWORD}" \
+        --admin_email="${WP_ADMIN_EMAIL}" \
+        --path=/workspace/multisite/wordpress
 
     command: |
       # Start services
-      sudo service mysql start || sudo /etc/init.d/mysql start
-      sudo service php8.3-fpm start
-      sudo service nginx start
-
-      # Wait for Gitpod to open port 80 and preview the site
-      gp await-port 80 && gp preview $(gp url 80)
-
-ports:
-  - port: 80
-    onOpen: open-preview
-  - port: 3306
-    onOpen: ignore
-
-vscode:
-  extensions:
-    - felixfbecker.php-debug
-    - bmewburn.vscode-intelephense-client
-    - wordpresstoolbox.wordpress-toolbox
-
-github:
-  prebuilds:
-    master: true
-    branches: true
-    pullRequests: true
-    addCheck: true
-    addComment: true
-
-# The following environment variables should be set in Gitpod's environment variables settings:
-# MYSQL_ROOT_PASSWORD
-# WP_ADMIN_USER
-# WP_ADMIN_PASSWORD
-# WP_ADMIN_EMAIL
+      sudo service mysql start && sudo service php8.3-fpm start && sudo nginx -g 'daemon off;'
