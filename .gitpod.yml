@@ -1,45 +1,44 @@
-image:
-  file: .gitpod.Dockerfile
-
 tasks:
-  - init: |
-      sudo mkdir -p /var/run/mysqld && \
-      sudo chown -R mysql:mysql /var/run/mysqld && \
-      sudo chmod 755 /var/run/mysqld && \
-      sudo service mysql start && \
-      sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASSWORD}';" || true && \
-      mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS wordpress;"
-  - name: Start Apache and MySQL
+  - name: docker-install
+    # Pulling and building docker images for the environment
+    init: |
+      docker-compose pull
+      docker-compose build
+      echo "Docker images built. Starting Docker..."
     command: |
-      # Make sure Apache listens on port 8080
-      sudo sed -i 's/Listen 80/Listen 8080/' /etc/apache2/ports.conf && \
-      sudo sed -i 's/<VirtualHost *:80>/<VirtualHost *:8080>/' /etc/apache2/sites-available/000-default.conf && \
-      sudo service apache2 start && \
-      sudo service mysql start && \
-      gp await-port 8080 && gp preview $(gp url 8080)
+      gp sync-done docker
+      docker-compose up -d  # Use detached mode to keep the terminal free for other commands
+
+  - name: wordpress-install
+    # Wait for Docker setup, configure WordPress with WP-CLI, set permissions
+    init: |
+      gp sync-await docker
+      sleep 15  # Slightly increased delay to ensure DB is fully ready
+      echo "Installing WordPress..."
+      docker exec -it gitpod-wpdev-wordpress wp core install \
+        --url="8000-${GITPOD_WORKSPACE_ID}.${GITPOD_WORKSPACE_CLUSTER_HOST}" \
+        --title="Gitpod WordPress Development" \
+        --admin_user="admin" \
+        --admin_password="admin" \
+        --admin_email="you@example.com" \
+        --skip-email --allow-root
+      # Set correct permissions for the Gitpod user and ensure web server compatibility
+      sudo chmod -R 755 ./wp-core
+      sudo chown -R gitpod:gitpod ./wp-core
+      sudo chmod -R 755 ./wp-content
+      sudo chown -R gitpod:gitpod ./wp-content
+    # Opens WordPress in an external browser and tails Apache logs
+    command: |
+      gp preview $(gp url 8000) --external
+      multitail ./.env/wp-apache-logs/access.log -I ./.env/wp-apache-logs/error.log
 
 ports:
+  - port: 8000
+    onOpen: ignore
   - port: 8080
-    onOpen: open-preview
-  - port: 3306
     onOpen: ignore
 
 vscode:
   extensions:
-    - felixfbecker.php-debug
-    - bmewburn.vscode-intelephense-client
-
-github:
-  prebuilds:
-    master: true
-    branches: true
-    pullRequests: true
-    addCheck: true
-    addComment: true
-
-# Environment variables should be set in Gitpod settings:
-# MYSQL_ROOT_PASSWORD
-# WP_ADMIN_USER
-# WP_ADMIN_PASSWORD
-# WP_ADMIN_EMAIL
-
+    - ms-azuretools.vscode-docker
+    - johnbillion.vscode-wordpress-hooks
