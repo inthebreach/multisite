@@ -2,9 +2,29 @@ image:
   file: .gitpod.Dockerfile
 
 tasks:
-  - name: Install WordPress Multisite
-    init: bash ./scripts/install.sh
-    command: bash ./scripts/start.sh
+  - name: Start Services
+    init: |
+      sudo service mysql start
+      sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASSWORD}';"
+      sudo mysql -e "CREATE DATABASE IF NOT EXISTS wordpress;"
+    command: |
+      sudo service mysql start
+      sudo service php8.3-fpm start
+      sudo nginx -g 'daemon off;'
+
+  - name: Setup WordPress
+    init: |
+      if [ ! -f /workspace/multisite/wordpress/wp-config.php ]; then
+        mkdir -p /workspace/multisite/wordpress
+        cd /workspace/multisite/wordpress
+        wp core download
+        wp config create --dbname=wordpress --dbuser=root --dbpass="${MYSQL_ROOT_PASSWORD}" --dbhost=localhost
+        wp core install --url=$(gp url 80) --title="WordPress Multisite" --admin_user=${WP_ADMIN_USER} --admin_password=${WP_ADMIN_PASSWORD} --admin_email=${WP_ADMIN_EMAIL}
+        wp core multisite-convert
+      fi
+    command: |
+      echo "WordPress is set up and ready to go!"
+      echo "You can access your site at: $(gp url 80)"
 
 ports:
   - port: 80
@@ -14,18 +34,20 @@ ports:
 
 vscode:
   extensions:
-    - eg2.vscode-npm-script
     - felixfbecker.php-debug
     - bmewburn.vscode-intelephense-client
-    - dbaeumer.vscode-eslint
-    - esbenp.prettier-vscode
+    - wordpresstoolbox.wordpress-toolbox
 
 github:
   prebuilds:
     master: true
     branches: true
     pullRequests: true
-    pullRequestsFromForks: true
     addCheck: true
     addComment: true
-    addBadge: true
+
+# The following environment variables should be set in Gitpod's environment variables settings:
+# MYSQL_ROOT_PASSWORD
+# WP_ADMIN_USER
+# WP_ADMIN_PASSWORD
+# WP_ADMIN_EMAIL
