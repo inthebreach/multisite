@@ -1,36 +1,46 @@
-FROM gitpod/workspace-full:latest
+image:
+  file: .gitpod.Dockerfile
 
-# Set debconf to noninteractive to avoid prompts during installation
-ENV DEBIAN_FRONTEND=noninteractive
+tasks:
+  - name: Setup and Start WordPress Multisite
+    init: |
+      sudo service mysql start
+      sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASSWORD}';" || true
+      mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS wordpress;"
+      if [ ! -f /workspace/multisite/wordpress/wp-config.php ]; then
+        wp core download --path=/workspace/multisite/wordpress
+        SITE_URL=$(gp url 80)
+        wp config create --dbname=wordpress --dbuser=root --dbpass="${MYSQL_ROOT_PASSWORD}" --dbhost=localhost --path=/workspace/multisite/wordpress
+        wp core multisite-install --url="${SITE_URL}" \
+          --title="Gitpod Multisite" \
+          --admin_user="${WP_ADMIN_USER}" \
+          --admin_password="${WP_ADMIN_PASSWORD}" \
+          --admin_email="${WP_ADMIN_EMAIL}" \
+          --path=/workspace/multisite/wordpress
+        echo "WordPress Multisite installed successfully!"
+      else
+        echo "WordPress is already installed."
+      fi
+    command: |
+      sudo service mysql start
+      sudo service apache2 restart
+      gp ports await 80 && gp preview $(gp url 80)
 
-# Install MySQL, PHP, and required extensions
-RUN sudo apt-get update && \
-    sudo apt-get install -y --no-install-recommends \
-    mysql-server \
-    php libapache2-mod-php php-mysql \
-    php-xml php-mbstring php-curl php-gd php-zip \
-    php-imagick php-intl php-soap \
-    && sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
+ports:
+  - port: 80
+    onOpen: open-preview
+  - port: 3306
+    onOpen: ignore
 
-# Install WP-CLI
-RUN curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
-    && chmod +x wp-cli.phar \
-    && sudo mv wp-cli.phar /usr/local/bin/wp
+vscode:
+  extensions:
+    - felixfbecker.php-debug
+    - bmewburn.vscode-intelephense-client
 
-# Enable Apache mod_rewrite for WordPress
-RUN sudo a2enmod rewrite
-
-# Configure PHP for better performance
-RUN sudo sed -i 's/;cgi.fix_pathinfo=1/cgi.fix_pathinfo=0/' /etc/php/*/apache2/php.ini && \
-    sudo sed -i 's/upload_max_filesize = 2M/upload_max_filesize = 64M/' /etc/php/*/apache2/php.ini && \
-    sudo sed -i 's/post_max_size = 8M/post_max_size = 64M/' /etc/php/*/apache2/php.ini && \
-    sudo sed -i 's/memory_limit = 128M/memory_limit = 256M/' /etc/php/*/apache2/php.ini
-
-# Fix Apache configuration
-RUN sudo sed -i 's/${GITPOD_REPO_ROOT}/\/workspace\/multisite/g' /etc/apache2/apache2.conf
-
-# Expose necessary ports
-EXPOSE 80 3306
-
-# Start Apache, MySQL when the container is run
-CMD sudo service mysql start && sudo service apache2 start && sudo tail -f /dev/null
+github:
+  prebuilds:
+    master: true
+    branches: true
+    pullRequests: true
+    addCheck: true
+    addComment: true
