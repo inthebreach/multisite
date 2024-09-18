@@ -2,29 +2,60 @@ image:
   file: .gitpod.Dockerfile
 
 tasks:
-  - name: Start Services
+  - name: Setup and Start WordPress Multisite
     init: |
-      sudo service mysql start
-      sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASSWORD}';"
-      sudo mysql -e "CREATE DATABASE IF NOT EXISTS wordpress;"
-    command: |
-      sudo service mysql start
-      sudo service php8.3-fpm start
-      sudo nginx -g 'daemon off;'
-
-  - name: Setup WordPress
-    init: |
-      if [ ! -f /workspace/multisite/wordpress/wp-config.php ]; then
-        mkdir -p /workspace/multisite/wordpress
-        cd /workspace/multisite/wordpress
-        wp core download
-        wp config create --dbname=wordpress --dbuser=root --dbpass="${MYSQL_ROOT_PASSWORD}" --dbhost=localhost
-        wp core install --url=$(gp url 80) --title="WordPress Multisite" --admin_user=${WP_ADMIN_USER} --admin_password=${WP_ADMIN_PASSWORD} --admin_email=${WP_ADMIN_EMAIL}
-        wp core multisite-convert
+      # Start MySQL service, fallback to /etc/init.d if needed
+      sudo service mysql start || sudo /etc/init.d/mysql start
+      
+      # Check if MySQL started successfully
+      if ! mysqladmin ping -u root --password="${MYSQL_ROOT_PASSWORD}" --silent; then
+          echo "MySQL failed to start."
+          exit 1
       fi
+      
+      # Create MySQL database for WordPress
+      mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS wordpress;" || { echo "Failed to create the database"; exit 1; }
+      
+      # Download WP-CLI if it does not exist
+      if ! command -v wp &> /dev/null; then
+          curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+          chmod +x wp-cli.phar
+          sudo mv wp-cli.phar /usr/local/bin/wp
+      fi
+      
+      # Ensure WordPress is not already downloaded to prevent overwriting
+      if [ ! -f /workspace/multisite/wordpress/wp-config.php ]; then
+          # Download WordPress
+          wp core download --path=/workspace/multisite/wordpress || { echo "Failed to download WordPress"; exit 1; }
+      fi
+      
+      # Get the Gitpod workspace URL dynamically
+      SITE_URL=$(gp url 80)
+      
+      # Set up wp-config.php with database details if it does not exist
+      if [ ! -f /workspace/multisite/wordpress/wp-config.php ]; then
+          wp config create --dbname=wordpress --dbuser=root --dbpass="${MYSQL_ROOT_PASSWORD}" --dbhost=localhost --path=/workspace/multisite/wordpress || { echo "Failed to create wp-config.php"; exit 1; }
+      fi
+      
+      # Install WordPress Multisite using the dynamic Gitpod URL
+      wp core multisite-install --url="${SITE_URL}" \
+        --title="Gitpod Multisite" \
+        --admin_user="${WP_ADMIN_USER}" \
+        --admin_password="${WP_ADMIN_PASSWORD}" \
+        --admin_email="${WP_ADMIN_EMAIL}" \
+        --path=/workspace/multisite/wordpress || { echo "Failed to install WordPress Multisite"; exit 1; }
+      
+      echo "WordPress Multisite installed successfully!"
+
     command: |
-      echo "WordPress is set up and ready to go!"
-      echo "You can access your site at: $(gp url 80)"
+      # Start MySQL service, using both options for compatibility
+      sudo service mysql start || sudo /etc/init.d/mysql start
+      # Start PHP-FPM service
+      sudo service php8.3-fpm start
+      # Start Nginx service
+      sudo service nginx start
+      # Wait for Gitpod to open port 80 and preview the site
+      gp await-port 80 && gp preview $(gp url 80)
 
 ports:
   - port: 80
