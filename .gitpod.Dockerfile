@@ -3,7 +3,7 @@ FROM gitpod/workspace-full:latest
 # Set debconf to noninteractive to avoid prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Remove Apache if present, and install Nginx, MySQL, PHP-FPM, and required extensions
+# Remove Apache, install Nginx, MySQL, PHP-FPM, and required extensions
 RUN sudo apt-get update && \
     sudo apt-get remove -y apache2 apache2-* && \
     sudo apt-get autoremove -y && \
